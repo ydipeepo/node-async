@@ -5,7 +5,12 @@ import ConcurrentStack from "./ConcurrentStack";
 import ProducerConsumer from "./ProducerConsumer";
 import Signal from "./Signal";
 
+function delay(timeout: number) {
+	return new Promise<void>(resolve => void setTimeout(resolve, timeout));
+}
+
 export {
+	delay,
 	AsyncEvent,
 	AsyncStream,
 	ConcurrentQueue,
