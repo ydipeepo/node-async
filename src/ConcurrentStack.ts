@@ -5,14 +5,14 @@ import ProducerConsumer from "./ProducerConsumer";
  */
 export default class ConcurrentStack<Item> extends ProducerConsumer<Item> {
 
-    /** @inheritdoc */
-    protected produce(item: Item) {
-        this.items.push(item);
-    }
+	/** @inheritdoc */
+	protected produce(item: Item) {
+		this.items.push(item);
+	}
 
-    /** @inheritdoc */
-    protected consume() {
-        return this.items.pop();
-    }
+	/** @inheritdoc */
+	protected consume() {
+		return this.items.pop();
+	}
 
 }

@@ -8,7 +8,7 @@ export default abstract class ProducerConsumer<Item> {
 
 	private readonly resolvers: ((item: Item) => void)[] = [];
 
-    private balance() {
+	private balance() {
 
 		//
 		// レゾルバ配列もしくはが空になるまで、もしくは
@@ -26,9 +26,9 @@ export default abstract class ProducerConsumer<Item> {
 
 	}
 
-    /**
-     * すべてのデータ項目。
-     */
+	/**
+	 * すべてのデータ項目。
+	 */
 	protected readonly items: Item[] = [];
 
 	/**
@@ -38,12 +38,12 @@ export default abstract class ProducerConsumer<Item> {
 		return this.items.length;
 	}
 
-    /**
+	/**
 	 * 指定したデータ項目を追加します。
 	 * @param item 追加する項目。
 	 */
 	add(item: Item) {
-        this.produce(item);
+		this.produce(item);
 		this.balance();
 	}
 
@@ -68,15 +68,15 @@ export default abstract class ProducerConsumer<Item> {
 		}
 	}
 
-    /**
-     * データ項目を追加する処理を実装します。
-     * @param item 追加する項目。
-     */
-    protected abstract produce(item: Item): void;
+	/**
+	 * データ項目を追加する処理を実装します。
+	 * @param item 追加する項目。
+	 */
+	protected abstract produce(item: Item): void;
 
-    /**
-     * データ項目を取り出す処理を実装します。
-     */
-    protected abstract consume(): Item;
+	/**
+	 * データ項目を取り出す処理を実装します。
+	 */
+	protected abstract consume(): Item;
 
 }
