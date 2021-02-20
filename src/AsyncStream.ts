@@ -43,8 +43,17 @@ namespace AsyncStream {
 	 * @param stream 非同期ストリーム。
 	 * @param pred 型変換処理を行うコールバック関数。
 	 */
-	export async function *map<T, U>(stream: AsyncStream<T>, fn: (value: T) => U): AsyncStream<U> {
-		for await (const value of stream) yield fn(value);
+	export function map<T, U>(stream: AsyncStream<T>, fn: (value: T) => U): AsyncStream<U>;
+
+	/**
+	 * 指定した非同期ストリームを別の型にマップします。
+	 * @param stream 非同期ストリーム。
+	 * @param pred 型変換処理を行うコールバック関数。
+	 */
+	export function map<T, U>(stream: AsyncStream<T>, fn: (value: T) => Promise<U>): AsyncStream<U>;
+
+	export async function *map<T, U>(stream: AsyncStream<T>, fn: (value: T) => (U | Promise<U>)): AsyncStream<U> {
+		for await (const value of stream) yield await fn(value);
 	}
 
 	/**
@@ -52,9 +61,18 @@ namespace AsyncStream {
 	 * @param stream 非同期ストリーム。
 	 * @param pred フィルタ処理を行うコールバック関数。
 	 */
-	export async function *filter<T>(stream: AsyncStream<T>, fn: (value: T) => boolean): AsyncStream<T> {
+	export function filter<T>(stream: AsyncStream<T>, fn: (value: T) => boolean): AsyncStream<T>;
+
+	/**
+	 * 指定した非同期ストリームをフィルタします。
+	 * @param stream 非同期ストリーム。
+	 * @param pred フィルタ処理を行うコールバック関数。
+	 */
+	export function filter<T>(stream: AsyncStream<T>, fn: (value: T) => Promise<boolean>): AsyncStream<T>;
+
+	export async function *filter<T>(stream: AsyncStream<T>, fn: (value: T) => (boolean | Promise<boolean>)): AsyncStream<T> {
 		for await (const value of stream) {
-			if (fn(value)) yield value;
+			if (await fn(value)) yield value;
 		}
 	}
 
