@@ -1,5 +1,6 @@
 import AsyncEvent from "./AsyncEvent";
 import ConcurrentQueue from "./ConcurrentQueue";
+import NamedAsyncEvent from "./NamedAsyncEvent";
 import ProducerConsumer from "./ProducerConsumer";
 import Signal from "./Signal";
 
@@ -81,14 +82,21 @@ namespace AsyncStream {
 	/**
 	 * イベントからストリームを作成します。
 	 * @param event 元となるイベント。
+	 */
+	export function from<T>(event: AsyncEvent<T>): AsyncStream<T>;
+
+	/**
+	 * 名前付きイベントからストリームを作成します。
+	 * @param event 元となるイベント。
 	 * @param name イベント名。
 	 */
-	export function from<T>(event: AsyncEvent<T>, name: string): AsyncStream<T>;
+	export function from<T>(event: NamedAsyncEvent<T>, name: string): AsyncStream<T>;
 
-	export function from<T>(input: AsyncGenerator<T, void, void> | ProducerConsumer<T> | AsyncEvent<T>, eventName?: string): AsyncStream<T> {
+	export function from<T>(input: AsyncGenerator<T, void, void> | ProducerConsumer<T> | AsyncEvent<T> | NamedAsyncEvent<T>, eventName?: string): AsyncStream<T> {
 		let stream: any;
 		if (input instanceof ProducerConsumer) stream = input.getMultiple();
-		else if (input instanceof AsyncEvent) stream = input.waitMultiple(eventName);
+		else if (input instanceof AsyncEvent) stream = input.waitMultiple();
+		else if (input instanceof NamedAsyncEvent) stream = input.waitMultiple(eventName);
 		else stream = input;
 		stream.map = <U>(fn: (value: T) => (U | Promise<U>)) => from<U>(createMap(stream, fn));
 		stream.filter = (fn: (value: T) => (boolean | Promise<boolean>)) => from<T>(createFilter(stream, fn));

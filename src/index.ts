@@ -1,9 +1,10 @@
+import Signal from "./Signal";
 import AsyncEvent from "./AsyncEvent";
-import AsyncStream from "./AsyncStream";
+import NamedAsyncEvent from "./NamedAsyncEvent";
+import ProducerConsumer from "./ProducerConsumer";
 import ConcurrentQueue from "./ConcurrentQueue";
 import ConcurrentStack from "./ConcurrentStack";
-import ProducerConsumer from "./ProducerConsumer";
-import Signal from "./Signal";
+import AsyncStream from "./AsyncStream";
 
 /**
  * タイムアウトするまで待機します。
@@ -14,11 +15,12 @@ function delay(timeout: number) {
 }
 
 export {
-	delay,
+	Signal,
 	AsyncEvent,
-	AsyncStream,
+	NamedAsyncEvent,
+	ProducerConsumer,
 	ConcurrentQueue,
 	ConcurrentStack,
-	ProducerConsumer,
-	Signal,
+	AsyncStream,
+	delay,
 }

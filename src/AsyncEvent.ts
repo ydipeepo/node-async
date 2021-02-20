@@ -2,52 +2,43 @@ import Signal from "./Signal";
 import AsyncStream from "./AsyncStream";
 
 /**
- * 名前付きデータを仲介するためのイベント型を表します。
+ * データを仲介するためのイベントを表します。
  */
 export default class AsyncEvent<Arg = void> {
 
-	private readonly resolverMap: { [name: string]: ((arg: Arg) => void)[] } = {};
+	private readonly resolvers: ((arg: Arg) => void)[] = [];
 
-	private async *createWaitMultiple(name: string, stopRequest?: Signal): AsyncGenerator<Arg, void, void> {
+	private async *createWaitMultiple(stopRequest?: Signal): AsyncGenerator<Arg, void, void> {
 		while (!stopRequest?.triggered) {
-			const arg = await this.wait(name);
+			const arg = await this.wait();
 			yield arg;
 		}
 	}
 
 	/**
-	 * 指定した名前のイベントを受け取るまで待機します。
-	 * @param name イベントの名前。
+	 * イベントを受け取るまで待機します。
 	 */
-	wait(name: string): Promise<Arg> {
-		return new Promise<Arg>(resolve => {
-			if (name in this.resolverMap) this.resolverMap[name].push(resolve);
-			else this.resolverMap[name] = [resolve];
-		});
+	wait(): Promise<Arg> {
+		return new Promise<Arg>(resolve => this.resolvers.push(resolve));
 	}
 
 	/**
-	 * 指定した名前のイベントを受け取る非同期ストリームを返します。
-	 * @param name イベントの名前。
+	 * イベントを受け取る非同期ストリームを返します。
 	 * @param stopRequest ストリームを停止するためのシグナル。
 	 */
-	waitMultiple(name: string, stopRequest?: Signal) {
-		return AsyncStream.from(this.createWaitMultiple(name, stopRequest));
+	waitMultiple(stopRequest?: Signal) {
+		return AsyncStream.from(this.createWaitMultiple(stopRequest));
 	}
 
 	/**
-	 * 指定したイベントを待機しているすべての受信者へ送信します。
-	 * @param name イベントの名前。
-	 * @param item イベントの引数。 
+	 * イベントを待機しているすべての受信者へ送信します。
+	 * @param arg イベントの引数。 
 	 */
-	emit(name: string, arg: Arg) {
-		if (name in this.resolverMap) {
-			const resolvers = this.resolverMap[name];
-			while (resolvers.length > 0) {
-				const resolve = resolvers.shift();
-				resolve(arg);
-			}
-		}
+	emit(arg: Arg) {
+        while (this.resolvers.length > 0) {
+            const resolve = this.resolvers.shift();
+            resolve(arg);
+        }
 	}
 
 }
