@@ -21,7 +21,7 @@ namespace AsyncStream {
 
 	/**
 	 * 複数の非同期ストリームをひとつにまとめます。
-	 * @param streams まとめる非同期ストリーム。
+	 * @param streams 非同期ストリーム。
 	 */
 	export async function *merge<T>(...streams: AsyncStream<T>[]): AsyncStream<T> {
 		const queue = new ConcurrentQueue<T>();
@@ -35,6 +35,26 @@ namespace AsyncStream {
 		} finally {
 			stopRequest.trigger();
 			await Promise.all(connections);
+		}
+	}
+
+	/**
+	 * 指定した非同期ストリームを別の型にマップします。
+	 * @param stream 非同期ストリーム。
+	 * @param pred 型変換処理を行うコールバック関数。
+	 */
+	export async function *map<T, U>(stream: AsyncStream<T>, fn: (value: T) => U): AsyncStream<U> {
+		for await (const value of stream) yield fn(value);
+	}
+
+	/**
+	 * 指定した非同期ストリームをフィルタします。
+	 * @param stream 非同期ストリーム。
+	 * @param pred フィルタ処理を行うコールバック関数。
+	 */
+	export async function *filter<T>(stream: AsyncStream<T>, fn: (value: T) => boolean): AsyncStream<T> {
+		for await (const value of stream) {
+			if (fn(value)) yield value;
 		}
 	}
 
