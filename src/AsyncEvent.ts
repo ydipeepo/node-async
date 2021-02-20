@@ -8,6 +8,13 @@ export default class AsyncEvent<Arg = void> {
 
 	private readonly resolverMap: { [name: string]: ((arg: Arg) => void)[] } = {};
 
+	private async *createWaitMultiple(name: string, stopRequest?: Signal): AsyncGenerator<Arg, void, void> {
+		while (!stopRequest?.triggered) {
+			const arg = await this.wait(name);
+			yield arg;
+		}
+	}
+
 	/**
 	 * 指定した名前のイベントを受け取るまで待機します。
 	 * @param name イベントの名前。
@@ -24,11 +31,8 @@ export default class AsyncEvent<Arg = void> {
 	 * @param name イベントの名前。
 	 * @param stopRequest ストリームを停止するためのシグナル。
 	 */
-	async *waitMultiple(name: string, stopRequest?: Signal): AsyncStream<Arg> {
-		while (!stopRequest?.triggered) {
-			const arg = await this.wait(name);
-			yield arg;
-		}
+	waitMultiple(name: string, stopRequest?: Signal) {
+		return AsyncStream.from(this.createWaitMultiple(name, stopRequest));
 	}
 
 	/**

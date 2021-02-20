@@ -3,10 +3,10 @@ import ProducerConsumer from "./ProducerConsumer";
 /**
  * 非同期の LIFO コレクションを表します。
  */
-export default class ConcurrentStack<Item> extends ProducerConsumer<Item> {
+class ConcurrentStack<T> extends ProducerConsumer<T> {
 
 	/** @inheritdoc */
-	protected produce(item: Item) {
+	protected produce(item: T) {
 		this.items.push(item);
 	}
 
@@ -16,3 +16,19 @@ export default class ConcurrentStack<Item> extends ProducerConsumer<Item> {
 	}
 
 }
+
+namespace ConcurrentStack {
+
+	/**
+	 * データ配列からキューを作成します。
+	 * @param items データ配列。
+	 */
+	export function from<T>(...items: T[]) {
+		const queue = new ConcurrentStack<T>();
+		for (const item of items) queue.add(item);
+		return queue;
+	}
+
+}
+
+export default ConcurrentStack;

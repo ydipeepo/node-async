@@ -3,10 +3,10 @@ import ProducerConsumer from "./ProducerConsumer";
 /**
  * 非同期の FIFO コレクションを表します。
  */
-export default class ConcurrentQueue<Item> extends ProducerConsumer<Item> {
+class ConcurrentQueue<T> extends ProducerConsumer<T> {
 
 	/** @inheritdoc */
-	protected produce(item: Item) {
+	protected produce(item: T) {
 		this.items.push(item);
 	}
 
@@ -16,3 +16,19 @@ export default class ConcurrentQueue<Item> extends ProducerConsumer<Item> {
 	}
 
 }
+
+namespace ConcurrentQueue {
+
+	/**
+	 * データ配列からキューを作成します。
+	 * @param items データ配列。
+	 */
+	export function from<T>(...items: T[]) {
+		const queue = new ConcurrentQueue<T>();
+		for (const item of items) queue.add(item);
+		return queue;
+	}
+
+}
+
+export default ConcurrentQueue;
