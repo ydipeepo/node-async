@@ -35,10 +35,10 @@ export default class AsyncEvent<Arg = void> {
 	 * @param arg イベントの引数。 
 	 */
 	emit(arg: Arg) {
-        while (this.resolvers.length > 0) {
-            const resolve = this.resolvers.shift();
-            resolve(arg);
-        }
+		while (this.resolvers.length > 0) {
+			const resolve = this.resolvers.shift();
+			resolve(arg);
+		}
 	}
 
 }
