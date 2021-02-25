@@ -12,13 +12,13 @@ export default abstract class ProducerConsumer<T> {
 
 		//
 		// レゾルバ配列もしくはが空になるまで、もしくは
-		// デキューできる項目が存在する限り解決し続ける
+		// 取り出せる項目が存在する限り解決し続けます
 		//
 
 		while (this.resolvers.length > 0) {
 			const item = this.consume();
 			if (item === undefined) break;
-			const resolve = this.resolvers.shift() as (item: T) => void;
+			const resolve: (item: T) => void = this.resolvers.shift();
 			resolve(item);
 		}
 
@@ -27,10 +27,20 @@ export default abstract class ProducerConsumer<T> {
 	}
 
 	private async *createGetMultiple(stopRequest?: Signal): AsyncGenerator<T, void, void> {
-		while (!stopRequest?.triggered) {
-			const item = await this.get();
-			yield item;
+
+		if (stopRequest === undefined) {
+
+			while (true) yield await this.get();
+
+		} else if (!stopRequest.triggered) {
+
+			do {
+				const item = await this.get(stopRequest);
+				if (item !== null) yield item;
+			} while (!stopRequest.triggered);
+
 		}
+
 	}
 
 	/**
@@ -57,11 +67,39 @@ export default abstract class ProducerConsumer<T> {
 	/**
 	 * データ項目を受け取るまで待機します。
 	 */
-	get(): Promise<T> {
-		return new Promise<T>(resolve => {
-			if (this.balance()) resolve(this.consume());
-			else this.resolvers.push(resolve);
-		});
+	get(): Promise<T>;
+
+	/**
+	 * データ項目を受け取るまで待機します。
+	 * @param stopRequest 待機を停止するためのシグナル。
+	 */
+	get(stopRequest: Signal): Promise<T | null>;
+
+	async get(stopRequest?: Signal): Promise<T | null> {
+
+		if (stopRequest === undefined) {
+
+			return this.balance()
+				? this.consume()
+				: await new Promise<T>(resolve => void this.resolvers.push(resolve));
+
+		} else if (!stopRequest.triggered) {
+
+			if (this.balance()) return this.consume();
+
+			//
+			// 値が取得できたかもしくは停止されたかどうかを判別するため
+			// 指定されたシグナルとの解決待ちが競合した状態を作ります
+			//
+
+			const stopTask = stopRequest.wait().then(_ => null);
+			const consumeTask = new Promise<T>(resolve => this.resolvers.push(resolve));
+			return await Promise.race([consumeTask, stopTask]);
+
+		}
+
+		return null;
+
 	}
 
 	/**

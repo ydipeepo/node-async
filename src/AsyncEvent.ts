@@ -4,22 +4,59 @@ import AsyncStream from "./AsyncStream";
 /**
  * データを仲介するためのイベントを表します。
  */
-export default class AsyncEvent<Arg = void> {
+export default class AsyncEvent<T = void> {
 
-	private readonly resolvers: ((arg: Arg) => void)[] = [];
+	private readonly resolvers: ((item: T) => void)[] = [];
 
-	private async *createWaitMultiple(stopRequest?: Signal): AsyncGenerator<Arg, void, void> {
-		while (!stopRequest?.triggered) {
-			const arg = await this.wait();
-			yield arg;
+	private async *createWaitMultiple(stopRequest?: Signal): AsyncGenerator<T, void, void> {
+
+		if (stopRequest === undefined) {
+
+			while (true) yield await this.wait();
+
+		} else if (!stopRequest.triggered) {
+
+			do {
+				const item = await this.wait(stopRequest);
+				if (item !== null) yield item;
+			} while (!stopRequest.triggered);
+
 		}
+
 	}
 
 	/**
 	 * イベントを受け取るまで待機します。
 	 */
-	wait(): Promise<Arg> {
-		return new Promise<Arg>(resolve => this.resolvers.push(resolve));
+	wait(): Promise<T>;
+
+	/**
+	 * イベントを受け取るまで待機します。
+	 * @param stopRequest 待機を停止するためのシグナル。
+	 */
+	wait(stopRequest: Signal): Promise<T | null>;
+
+	async wait(stopRequest?: Signal): Promise<T | null> {
+
+		if (stopRequest === undefined) {
+
+			return await new Promise<T>(resolve => this.resolvers.push(resolve));
+
+		} else if (!stopRequest.triggered) {
+
+			//
+			// 値が取得できたかもしくは停止されたかどうかを判別するため
+			// 指定されたシグナルとの解決待ちが競合した状態を作ります
+			//
+
+			const stopTask = stopRequest.wait().then(_ => null);
+			const waitTask = new Promise<T>(resolve => this.resolvers.push(resolve));
+			return await Promise.race([waitTask, stopTask]);
+
+		}
+
+		return null;
+
 	}
 
 	/**
@@ -32,12 +69,12 @@ export default class AsyncEvent<Arg = void> {
 
 	/**
 	 * イベントを待機しているすべての受信者へ送信します。
-	 * @param arg イベントの引数。 
+	 * @param item イベントの引数。 
 	 */
-	emit(arg: Arg) {
+	emit(item: T) {
 		while (this.resolvers.length > 0) {
 			const resolve = this.resolvers.shift();
-			resolve(arg);
+			resolve(item);
 		}
 	}
 
