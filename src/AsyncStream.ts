@@ -1,6 +1,6 @@
-import AsyncEvent from "./AsyncEvent";
+import { EventEmitter } from "events";
+import { range } from "@ydipeepo/array";
 import ConcurrentQueue from "./ConcurrentQueue";
-import NamedAsyncEvent from "./NamedAsyncEvent";
 import ProducerConsumer from "./ProducerConsumer";
 import Signal from "./Signal";
 
@@ -30,8 +30,19 @@ interface AsyncStream<T> extends AsyncGenerator<T, void, void> {
 	 */
 	mergeWith(...generators: AsyncGenerator<T, void, void>[]): AsyncStream<T>;
 
-	// TODO:
-	// duplicate, split 等追加する
+	/**
+	 * このストリームを分配した新たなストリームを作成します。
+	 * @param count 分配数。
+	 * @returns 分配された新たなストリームの配列。
+	 */
+	distribute(count: number): AsyncStream<T>[];
+
+	/**
+	 * このストリームを分配した新たなストリームを作成します。
+	 * @param count 分配数。
+	 * @returns 分配された新たなストリームの配列。
+	 */
+	split(...fn: ((value: T) => (boolean | Promise<boolean>))[]): AsyncStream<T>[];
 
 }
 
@@ -51,13 +62,23 @@ namespace AsyncStream {
 
 	}
 
+	async function *createMappedGenerator<T, U>(generator: AsyncGenerator<T, void, void>, fn: (value: T) => (U | Promise<U>)) {
+		for await (const value of generator) yield await fn(value);
+	}
+
+	async function *filterGenerator<T>(generator: AsyncGenerator<T, void, void>, fn: (value: T) => (boolean | Promise<boolean>)) {
+		for await (const value of generator) {
+			if (await fn(value)) yield value;
+		}
+	}
+
 	async function *mergeGenerators<T>(...generators: AsyncGenerator<T, void, void>[]): AsyncGenerator<T, void, void> {
 
 		const queue = new ConcurrentQueue<T>();
 		const stopRequest = new Signal(); // (*1)
 		const connections = generators.map(generator => connectQueue(generator, queue, stopRequest));
 
-		const stopTask = Promise.all(connections).then(_ => null);
+		const stopTask = Promise.all(connections).then(() => null);
 
 		try {
 
@@ -99,18 +120,74 @@ namespace AsyncStream {
 
 	}
 
-	function createConcatenatedGenerator<T>(self: AsyncGenerator<T, void, void>, ...generators: AsyncGenerator<T, void, void>[]) {
-		return mergeGenerators(self, ...generators);
-	}
+	function distributeGenerator<T>(generator: AsyncGenerator<T, void, void>, count: number): AsyncGenerator<T, void, void>[] {
 
-	async function *createMappedGenerator<T, U>(self: AsyncGenerator<T, void, void>, fn: (value: T) => (U | Promise<U>)) {
-		for await (const value of self) yield await fn(value);
-	}
+		if (count === 0) throw new RangeError(`Insufficient duplicant count: ${count}`);
 
-	async function *createFilteredGenerator<T>(self: AsyncGenerator<T, void, void>, fn: (value: T) => (boolean | Promise<boolean>)) {
-		for await (const value of self) {
-			if (await fn(value)) yield value;
+		const eventEmitter = new EventEmitter();
+		const stopRequest = new Signal();
+
+		async function createDuplicator() {
+
+			try {
+				for await (const value of generator) eventEmitter.emit("duplicate", value);
+			} finally {
+				stopRequest.trigger();
+			}
+
 		}
+
+		async function *createDuplicantGenerator() {
+
+			const queue = new ConcurrentQueue<T>();
+			const eventHandler = (value: T) => queue.add(value);
+			eventEmitter.on("duplicate", eventHandler);
+
+			try {
+				for await (const value of queue.getMultiple(stopRequest)) yield value;
+			} finally {
+				eventEmitter.off("duplicate", eventHandler);
+				stopRequest.trigger();
+				if (--count === 0) {
+					await generator.return();
+					await duplicator; //
+				}
+			}
+
+		}
+
+		const generators = range(count).map(() => createDuplicantGenerator());
+		const duplicator = createDuplicator();
+		return generators;
+
+	}
+
+	function splitGenerator<T>(generator: AsyncGenerator<T, void, void>, ...fn: ((value: T) => (boolean | Promise<boolean>))[]): AsyncGenerator<T, void, void>[] {
+
+		return distributeGenerator(generator, fn.length).map((generator, i) => filterGenerator(generator, fn[i]));
+
+	}
+
+	function fromCollection<T>(collection: ProducerConsumer<T>, stopRequest?: Signal): AsyncGenerator<T, void, void> {
+
+		return collection.getMultiple(stopRequest);
+
+	}
+
+	async function *fromEventEmitter<T>(eventEmitter: EventEmitter, eventName: string, stopRequest?: Signal): AsyncGenerator<T, void, void> {
+
+		const queue = new ConcurrentQueue<T>();
+		const eventHandler = (value: T) => queue.add(value);
+		stopRequest ??= new Signal();
+		eventEmitter.on(eventName, eventHandler);
+
+		try {
+			for await (const value of queue.getMultiple(stopRequest)) yield value;
+		} finally {
+			eventEmitter.off(eventName, eventHandler);
+			stopRequest.trigger();
+		}
+
 	}
 
 	/**
@@ -122,37 +199,45 @@ namespace AsyncStream {
 	/**
 	 * Producer-Consumer コレクションからストリームを作成します。
 	 * @param collection 元となる Producer-Consumer コレクション。
+	 * @param stopRequest 待機を停止するためのシグナル。
 	 */
-	export function from<T>(collection: ProducerConsumer<T>): AsyncStream<T>;
-
-	/**
-	 * イベントからストリームを作成します。
-	 * @param event 元となるイベント。
-	 */
-	export function from<T>(event: AsyncEvent<T>): AsyncStream<T>;
+	export function from<T>(collection: ProducerConsumer<T>, stopRequest?: Signal): AsyncStream<T>;
 
 	/**
 	 * 名前付きイベントからストリームを作成します。
-	 * @param event 元となるイベント。
-	 * @param name イベント名。
+	 * @param eventEmitter 元となるイベント。
+	 * @param eventName イベント名。
+	 * @param stopRequest 待機を停止するためのシグナル。
 	 */
-	export function from<T>(event: NamedAsyncEvent<T>, name: string): AsyncStream<T>;
+	export function from<T>(eventEmitter: EventEmitter, eventName: string, stopRequest?: Signal): AsyncStream<T>;
 
-	export function from<T>(input: AsyncGenerator<T, void, void> | ProducerConsumer<T> | AsyncEvent<T> | NamedAsyncEvent<T>, eventName?: string): AsyncStream<T> {
-
-		//
-		// 元の型を判別します
-		//
+	export function from<T>(arg1: AsyncGenerator<T, void, void> | ProducerConsumer<T> | EventEmitter, arg2?: string | Signal, arg3?: Signal): AsyncStream<T> {
 
 		let stream: any;
-		if (input instanceof ProducerConsumer) stream = input.getMultiple();
-		else if (input instanceof AsyncEvent) stream = input.waitMultiple();
-		else if (input instanceof NamedAsyncEvent) stream = input.waitMultiple(eventName);
-		else stream = input;
+
+		//
+		// 呼び出し引数を判別します
+		//
+
+		if (arg1 instanceof ProducerConsumer) {
+			const collection = arg1 as ProducerConsumer<T>;
+			const stopRequest = arg2 as (Signal | undefined);
+			stream = fromCollection(collection, stopRequest);
+		} else if (arg1 instanceof EventEmitter) {
+			const eventEmitter = arg1 as EventEmitter;
+			const eventName = arg2 as string;
+			const stopRequest = arg3 as (Signal | undefined);
+			stream = fromEventEmitter(eventEmitter, eventName, stopRequest);
+		} else {
+			const generator = arg1 as AsyncGenerator<T, void, void>;
+			stream = generator;
+		}
 
 		stream.map = <U>(fn: (value: T) => (U | Promise<U>)) => from<U>(createMappedGenerator(stream, fn));
-		stream.filter = (fn: (value: T) => (boolean | Promise<boolean>)) => from<T>(createFilteredGenerator(stream, fn));
-		stream.mergeWith = (...generators: AsyncGenerator<T, void, void>[]) => from(createConcatenatedGenerator(stream, ...generators));
+		stream.filter = (fn: (value: T) => (boolean | Promise<boolean>)) => from<T>(filterGenerator(stream, fn));
+		stream.mergeWith = (...generators: AsyncGenerator<T, void, void>[]) => from(mergeGenerators(stream, ...generators));
+		stream.distribute = (count: number) => distributeGenerator(stream, count).map(from);
+		stream.split = (...fn: ((value: T) => (boolean | Promise<boolean>))[]) => splitGenerator(stream, ...fn).map(from);
 		return stream;
 
 	}

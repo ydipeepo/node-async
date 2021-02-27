@@ -12,7 +12,7 @@ class ConcurrentStack<T> extends ProducerConsumer<T> {
 
 	/** @inheritdoc */
 	protected consume() {
-		return this.items.pop();
+		return this.items.pop() ?? null; // undefined を null にマップ
 	}
 
 }

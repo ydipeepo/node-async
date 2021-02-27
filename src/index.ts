@@ -1,6 +1,4 @@
 import Signal from "./Signal";
-import AsyncEvent from "./AsyncEvent";
-import NamedAsyncEvent from "./NamedAsyncEvent";
 import ProducerConsumer from "./ProducerConsumer";
 import ConcurrentQueue from "./ConcurrentQueue";
 import ConcurrentStack from "./ConcurrentStack";
@@ -16,8 +14,6 @@ function delay(timeout: number) {
 
 export {
 	Signal,
-	AsyncEvent,
-	NamedAsyncEvent,
 	ProducerConsumer,
 	ConcurrentQueue,
 	ConcurrentStack,

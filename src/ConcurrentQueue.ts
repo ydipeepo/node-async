@@ -12,7 +12,7 @@ class ConcurrentQueue<T> extends ProducerConsumer<T> {
 
 	/** @inheritdoc */
 	protected consume() {
-		return this.items.shift();
+		return this.items.shift() ?? null; // undefined を null にマップ
 	}
 
 }

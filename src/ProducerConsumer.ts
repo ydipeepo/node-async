@@ -1,5 +1,4 @@
 import Signal from "./Signal";
-import AsyncStream from "./AsyncStream";
 
 /**
  * Producer-Consumer 用途のコレクションを表します。
@@ -17,29 +16,12 @@ export default abstract class ProducerConsumer<T> {
 
 		while (this.resolvers.length > 0) {
 			const item = this.consume();
-			if (item === undefined) break;
+			if (item === null) break;
 			const resolve: (item: T) => void = this.resolvers.shift();
 			resolve(item);
 		}
 
 		return this.items.length > 0;
-
-	}
-
-	private async *createGetMultiple(stopRequest?: Signal): AsyncGenerator<T, void, void> {
-
-		if (stopRequest === undefined) {
-
-			while (true) yield await this.get();
-
-		} else if (!stopRequest.triggered) {
-
-			do {
-				const item = await this.get(stopRequest);
-				if (item !== null) yield item;
-			} while (!stopRequest.triggered);
-
-		}
 
 	}
 
@@ -66,12 +48,14 @@ export default abstract class ProducerConsumer<T> {
 
 	/**
 	 * データ項目を受け取るまで待機します。
+	 * @returns 取得した項目。
 	 */
 	get(): Promise<T>;
 
 	/**
 	 * データ項目を受け取るまで待機します。
 	 * @param stopRequest 待機を停止するためのシグナル。
+	 * @returns 取得できた場合は項目、停止が受理された場合は null。
 	 */
 	get(stopRequest: Signal): Promise<T | null>;
 
@@ -92,9 +76,17 @@ export default abstract class ProducerConsumer<T> {
 			// 指定されたシグナルとの解決待ちが競合した状態を作ります
 			//
 
-			const stopTask = stopRequest.wait().then(_ => null);
-			const consumeTask = new Promise<T>(resolve => this.resolvers.push(resolve));
-			return await Promise.race([consumeTask, stopTask]);
+			let stopTrailer: () => null = () => null;
+			const stopTask = stopRequest.wait().then(() => stopTrailer());
+			const waitTask = new Promise<T>(resolve => {
+				stopTrailer = () => {
+					const i = this.resolvers.indexOf(resolve);
+					if (i !== -1) this.resolvers.splice(i, 1);
+					return null;
+				};
+				this.resolvers.push(resolve);
+			});
+			return await Promise.race([waitTask, stopTask]);
 
 		}
 
@@ -104,10 +96,32 @@ export default abstract class ProducerConsumer<T> {
 
 	/**
 	 * データ項目を受け取る非同期ストリームを返します。
-	 * @param stopRequest ストリームを停止するためのシグナル。
+	 * @param stopRequest 待機を停止するためのシグナル。
 	 */
-	getMultiple(stopRequest?: Signal) {
-		return AsyncStream.from(this.createGetMultiple(stopRequest));
+	async *getMultiple(stopRequest?: Signal): AsyncGenerator<T, void, void> {
+
+		//
+		// stopRequest は yield を経由した return()/throw() による中断と、
+		// get() 処理の中断のための停止可能な競合状態を作る目的とで兼用されます
+		// これはジェネレータの終了処理を return()/throw() のみに集約できないためです
+		//
+
+		stopRequest ??= new Signal();
+
+		try {
+
+			while (!stopRequest.triggered) {
+				const item = await this.get(stopRequest);
+				if (item === null) break;
+				yield item;
+			}
+
+		} finally {
+
+			stopRequest.trigger();
+
+		}
+
 	}
 
 	/**
@@ -119,6 +133,6 @@ export default abstract class ProducerConsumer<T> {
 	/**
 	 * データ項目を取り出す処理を実装します。
 	 */
-	protected abstract consume(): T;
+	protected abstract consume(): T | null;
 
 }
